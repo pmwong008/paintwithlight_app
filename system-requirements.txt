@@ -1,0 +1,5 @@
+python3-picamera2
+libcamera-apps
+python3-flask
+python3-numpy
+python3-pil

@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Review Capture</title>
+</head>
+<body>
+    <h1>Review Your Stacked Photo</h1>
+    <img src="{{ url_for('static', filename='temp.jpg') }}" width="640" height="480">
+    <form action="{{ url_for('keep') }}" method="post">
+        <button type="submit">Keep</button>
+    </form>
+    <form action="{{ url_for('discard') }}" method="post">
+        <button type="submit">Discard</button>
+    </form>
+</body>
+</html>

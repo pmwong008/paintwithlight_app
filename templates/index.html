@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Nostalgic Camera</title>
+</head>
+<body>
+    <h1>Nostalgic Photo Booth</h1>
+    <img src="{{ url_for('video_feed') }}" width="640" height="360" alt="Live Preview">
+
+    <form action="{{ url_for('capture') }}" method="post">
+        <label for="exposure">Exposure (seconds):</label>
+        <input type="range" id="exposure" name="exposure" min="3" max="12" step="1" value="6">
+        <span id="exp_val">6</span>s
+        <button type="submit">Shutter</button>
+    </form>
+
+    <form action="{{ url_for('gallery') }}" method="get">
+        <button type="submit">View Gallery</button>
+    </form>
+    
+
+    <script>
+        const slider = document.getElementById("exposure");
+        const output = document.getElementById("exp_val");
+        slider.oninput = function() { output.innerText = this.value; }
+    </script>
+</body>
+</html>

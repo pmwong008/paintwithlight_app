@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Gallery</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+</head>
+<body>
+    <h1>📸 Your Nostalgic Gallery</h1>
+    <p><a href="{{ url_for('index') }}"><button>Back to Camera</button></a></p>
+
+    <div id="gallery" style="display:flex; flex-wrap:wrap;">
+        {% for file in files %}
+            <div style="margin:10px;">
+                <img src="{{ url_for('static', filename='gallery/' + file) }}" width="320">
+                <p>{{ file }}</p>
+            </div>
+        {% endfor %}
+    </div>
+    <p><a href="#gallery"><button>Back to Top of Gallery</button></a></p>
+    <p><a href="{{ url_for('index') }}"><button>Back to Camera</button></a></p>
+</body>
+</html>

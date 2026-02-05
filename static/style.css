@@ -1,0 +1,36 @@
+body {
+    font-family: 'Courier New', monospace;
+    background-color: #f4f1e1;
+    color: #333;
+    text-align: center;
+}
+
+h1 {
+    font-family: 'Brush Script MT', cursive;
+    color: #5a3e2b;
+    text-shadow: 2px 2px #d9c7a3;
+}
+
+img {
+    border: 8px solid #fff;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    border-radius: 12px;
+    filter: sepia(60%) contrast(120%);
+    margin: 10px;
+}
+
+button {
+    background-color: #5a3e2b;
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    margin: 10px;
+    font-size: 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    box-shadow: 2px 2px 6px rgba(0,0,0,0.3);
+}
+
+button:hover {
+    background-color: #7a523d;
+}
