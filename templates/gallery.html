@@ -11,13 +11,47 @@
 
     <div id="gallery" style="display:flex; flex-wrap:wrap;">
         {% for file in files %}
-            <div style="margin:10px;">
-                <img src="{{ url_for('static', filename='gallery/' + file) }}" width="320">
-                <p>{{ file }}</p>
+            <div class="gallery-item" style="margin:10px;">
+                <img src="{{ url_for('static', filename='gallery/' + file) }}" 
+                alt="captured"     
+                class="gallery-photo"
+                     data-filename="{{ file }}" 
+                     width="320">
+                
             </div>
         {% endfor %}
     </div>
     <p><a href="#gallery"><button>Back to Top of Gallery</button></a></p>
     <p><a href="{{ url_for('index') }}"><button>Back to Camera</button></a></p>
+
+
+<!-- script>
+document.addEventListener("DOMContentLoaded", () => {
+  const gallery = document.getElementById("gallery");
+
+  gallery.addEventListener("click", (event) => {
+    const img = event.target.closest(".gallery-photo");
+    if (!img) return; // ignore clicks outside images
+
+    const filename = img.dataset.filename;
+    const recipient = document.getElementById("recipient").value;
+
+    if (!recipient) {
+      alert("Please enter an email address first.");
+      return;
+    }
+
+    fetch(`/share/${filename}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient })
+    })
+    .then(res => res.json())
+    .then(data => alert(data.message))
+    .catch(err => console.error(err));
+  });
+});
+</script -- IGNORE -->
 </body>
+
 </html>

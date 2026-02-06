@@ -23,6 +23,22 @@
         const slider = document.getElementById("exposure");
         const output = document.getElementById("exp_val");
         slider.oninput = function() { output.innerText = this.value; }
+
+    // Poll every 2 seconds
+    setInterval(async () => {
+        try {
+        const response = await fetch("/status");
+        const data = await response.json();
+
+        if (data.captured) {
+            // Redirect to review page once capture is ready
+            window.location.href = "/review";
+        }
+        } catch (err) {
+        console.error("Polling error:", err);
+        }
+    }, 2000);
     </script>
+
 </body>
 </html>
