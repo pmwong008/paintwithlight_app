@@ -4,17 +4,17 @@ import cv2, numpy as np, time, os
 import threading, requests, cv2, mediapipe as mp, time
 import os
 from dotenv import load_dotenv
-from email.message import EmailMessage
-import smtplib
+# from email.message import EmailMessage
+import state
+# import smtplib
 
 load_dotenv()
 
-SMTP_USER = os.getenv("SMTP_USER")
-SMTP_PASS = os.getenv("SMTP_PASS")
+# SMTP_USER = os.getenv("SMTP_USER")
+# SMTP_PASS = os.getenv("SMTP_PASS")
 
 os.makedirs("static/gallery", exist_ok=True)
 TEMP_FILE = "static/temp.jpg"
-capture_done = False
 
 # MediaPipe setup 
 mp_hands = mp.solutions.hands 
@@ -26,6 +26,11 @@ picam2 = Picamera2()
 config = picam2.create_video_configuration()
 picam2.configure(config)
 picam2.start()
+
+# Global gesture feedback
+last_gesture = None
+last_gesture_time = None
+
 
 def gesture_loop():
     frame_count = 0
@@ -53,7 +58,7 @@ def gesture_loop():
         results = hands.process(rgb)
 
         if results.multi_hand_landmarks:
-            print("✋ Hand detected! Triggering capture...")
+            print("Hand detected! Triggering capture...")
             try:
                 requests.post("http://127.0.0.1:5000/capture", data={"exposure":6})
             except Exception as e:
@@ -65,7 +70,6 @@ def gesture_loop():
 # Start gesture detection in background
 gesture_thread = threading.Thread(target=gesture_loop, daemon=True)
 gesture_thread.start()
-
 
 def generate_frames():
     while True:
@@ -106,7 +110,11 @@ def index():
 
 @app.route("/capture", methods=["POST"])
 def capture():
-    global capture_done
+    if state.capture_in_progress:
+        return jsonify({"message": "Capture already in progress"}), 429
+    
+    state.capture_in_progress = True
+
     try:
         exposure = int(request.form.get("exposure", 3))  # seconds
         print(f"Starting capture with exposure={exposure}s")
@@ -138,7 +146,8 @@ def capture():
         os.makedirs("static", exist_ok=True)
         cv2.imwrite(TEMP_FILE, stacked)
         print(f"Saved stacked image to {TEMP_FILE}")
-        capture_done = True
+        state.capture_done = True
+        # return jsonify({"message": "Capture complete"})
         return render_template("review.html", filename=TEMP_FILE)
 
     except Exception as e:
@@ -151,12 +160,19 @@ def capture():
         <p>Something went wrong: {e}</p>
         <p><a href='{url_for("index")}'>Back to preview</a></p>
         """, 500
+    
+    finally:
+        state.capture_in_progress = False
 
 
-@app.route("/status") 
-def status(): 
-    global capture_done 
-    return jsonify({"captured": capture_done})
+@app.route("/status")
+def status():
+    return jsonify({
+        "captured": state.capture_done,
+        "capture_in_progress": state.capture_in_progress,
+        # "last_gesture": last_gesture 
+    })
+
 
 @app.route("/review")
 def review():
@@ -167,25 +183,22 @@ def review():
         # If no temp image, go back to index
         return redirect(url_for("index"))
 
-
-
 @app.route("/keep", methods=["POST"])
 def keep():
-    global capture_done
+    
     timestamp = int(time.time())
     saved_file = f"static/gallery/photo_{timestamp}.jpg"
     
     os.rename(TEMP_FILE, saved_file)
     enforce_gallery_limit()
-    capture_done = False  # Reset capture_done flag
+    state.capture_done = False  # Reset capture_done flag
     return redirect(url_for("index"))
 
 @app.route("/discard", methods=["POST"])
 def discard():
-    global capture_done
     if os.path.exists(TEMP_FILE):
         os.remove(TEMP_FILE)
-    capture_done = False  # Reset capture_done flag
+    state.capture_done = False  # Reset capture_done flag
     return redirect(url_for("index"))
 
 @app.route("/video_feed")
@@ -200,6 +213,7 @@ def gallery():
     files.sort(reverse=True)
     return render_template("gallery.html", files=files)
 
+'''
 @app.route("/share/<filename>", methods=["POST"])
 def share(filename):
     data = request.get_json()
@@ -224,6 +238,7 @@ def share(filename):
         return jsonify({"message": f"Photo sent to {recipient}!"})
     except Exception as e:
         return jsonify({"message": f"Error sending email: {e}"}), 500
+'''
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, threaded=True)

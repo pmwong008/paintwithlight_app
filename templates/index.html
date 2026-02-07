@@ -13,32 +13,45 @@
         <span id="exp_val">6</span>s
         <button type="submit">Shutter</button>
     </form>
+    <div id="gesture-indicator" 
+        style="display:none; color: red; font-weight: bold;">
+        Gesture detected — capturing...
+    </div>
+
 
     <form action="{{ url_for('gallery') }}" method="get">
         <button type="submit">View Gallery</button>
     </form>
     
 
-    <script>
-        const slider = document.getElementById("exposure");
-        const output = document.getElementById("exp_val");
-        slider.oninput = function() { output.innerText = this.value; }
+<script>
+    const slider = document.getElementById("exposure");
+    const output = document.getElementById("exp_val");
+    slider.oninput = function() { output.innerText = this.value; }
 
-    // Poll every 2 seconds
     setInterval(async () => {
         try {
-        const response = await fetch("/status");
-        const data = await response.json();
+            const response = await fetch("/status");
+            const data = await response.json();
 
-        if (data.captured) {
+            // Show indicator if capture is in progress
+            if (data.capture_in_progress) {
+                document.getElementById("gesture-indicator").style.display = "block";
+            } else {
+                document.getElementById("gesture-indicator").style.display = "none";
+            }
+
             // Redirect to review page once capture is ready
-            window.location.href = "/review";
-        }
+            if (data.captured) {
+                window.location.href = "/review";
+            }
         } catch (err) {
-        console.error("Polling error:", err);
+            console.error("Polling error:", err);
         }
     }, 2000);
-    </script>
+</script>
+
+
 
 </body>
 </html>

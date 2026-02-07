@@ -2,3 +2,4 @@ venv/
 static/gallery/
 static/archived_photos/
 .env
+__pycache__/
