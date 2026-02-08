@@ -21,6 +21,7 @@ mp_hands = mp.solutions.hands
 hands = mp_hands.Hands()
 
 app = Flask(__name__)
+
 picam2 = Picamera2()
 
 config = picam2.create_video_configuration()
@@ -37,6 +38,10 @@ def gesture_loop():
     cooldown_until = 0
 
     while True:
+        if not state.scanner_active:
+            time.sleep(0.5) # idle briefly when scanner is inactive
+            continue
+
         frame = picam2.capture_array()
         if frame is None:
             continue
@@ -106,6 +111,7 @@ def enforce_gallery_limit(limit=50):
 
 @app.route("/")
 def index():
+    state.scanner_active = True
     return render_template("index.html")
 
 @app.route("/capture", methods=["POST"])
@@ -176,6 +182,7 @@ def status():
 
 @app.route("/review")
 def review():
+    state.scanner_active = False
     # Make sure temp.jpg exists before rendering
     if os.path.exists("static/temp.jpg"):
         return render_template("review.html", file="temp.jpg")
@@ -208,6 +215,7 @@ def video_feed():
 
 @app.route("/gallery")
 def gallery():
+    state.scanner_active = False
     files = [f for f in os.listdir("static/gallery") if f.endswith(".jpg")]
     # Sort by timestamp (newest first)
     files.sort(reverse=True)
