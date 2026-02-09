@@ -17,8 +17,9 @@ os.makedirs("static/gallery", exist_ok=True)
 TEMP_FILE = "static/temp.jpg"
 
 # MediaPipe setup 
-mp_hands = mp.solutions.hands 
-hands = mp_hands.Hands()
+pose = mp.solutions.pose.Pose(min_detection_confidence=0.5,
+                              min_tracking_confidence=0.5)
+
 
 app = Flask(__name__)
 
@@ -32,45 +33,66 @@ picam2.start()
 last_gesture = None
 last_gesture_time = None
 
-
 def gesture_loop():
     frame_count = 0
     cooldown_until = 0
+    quit_frames = 0
+    capture_frames = 0
 
-    while True:
+    while not state.quit_requested:
         if not state.scanner_active:
-            time.sleep(0.5) # idle briefly when scanner is inactive
+            time.sleep(0.5)
             continue
 
         frame = picam2.capture_array()
         if frame is None:
             continue
 
-        # Downscale for faster processing
         small = cv2.resize(frame, (320, 240))
         rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
 
         frame_count += 1
-
-        # Only run detection every 5th frame
         if frame_count % 5 != 0:
             continue
 
-        # Skip detection if still in cooldown
         if time.time() < cooldown_until:
             continue
 
-        results = hands.process(rgb)
+        results = pose.process(rgb)
+        if not results.pose_landmarks:
+            quit_frames = 0
+            capture_frames = 0
+            continue
 
-        if results.multi_hand_landmarks:
-            print("Hand detected! Triggering capture...")
-            try:
-                requests.post("http://127.0.0.1:5000/capture", data={"exposure":6})
-            except Exception as e:
-                print("Error triggering capture:", e)
+        landmarks = results.pose_landmarks.landmark
+        nose = landmarks[mp.solutions.pose.PoseLandmark.NOSE]
+        left_wrist = landmarks[mp.solutions.pose.PoseLandmark.LEFT_WRIST]
+        right_wrist = landmarks[mp.solutions.pose.PoseLandmark.RIGHT_WRIST]
 
-            # Set cooldown (e.g. 6 seconds)
-            cooldown_until = time.time() + 6
+        # --- Quit detection (priority) ---
+        if left_wrist.y < nose.y and right_wrist.y < nose.y:
+            quit_frames += 1
+            if quit_frames >= 3:   # require 3 consecutive frames
+                print("Two wrists above nose → quit")
+                quit_app()
+                break
+        else:
+            quit_frames = 0
+
+        # --- Capture detection ---
+        if (left_wrist.y < nose.y) ^ (right_wrist.y < nose.y):  # exactly one wrist above
+            capture_frames += 1
+            if capture_frames >= 3:
+                print("One wrist above nose → capture")
+                try:
+                    requests.post("http://127.0.0.1:5000/capture", data={"exposure":6})
+                except Exception as e:
+                    print("Error triggering capture:", e)
+                cooldown_until = time.time() + 6
+                capture_frames = 0
+        else:
+            capture_frames = 0
+
 
 # Start gesture detection in background
 gesture_thread = threading.Thread(target=gesture_loop, daemon=True)
