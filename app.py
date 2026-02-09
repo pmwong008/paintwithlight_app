@@ -6,6 +6,7 @@ import os
 from dotenv import load_dotenv
 # from email.message import EmailMessage
 import state
+import sys
 # import smtplib
 
 load_dotenv()
@@ -36,41 +37,54 @@ last_gesture_time = None
 def gesture_loop():
     frame_count = 0
     cooldown_until = 0
+    two_hand_frames = 0
 
-    while True:
+    while not state.quit_requested:
         if not state.scanner_active:
-            time.sleep(0.5) # idle briefly when scanner is inactive
+            time.sleep(0.5)
             continue
 
         frame = picam2.capture_array()
         if frame is None:
             continue
 
-        # Downscale for faster processing
         small = cv2.resize(frame, (320, 240))
         rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
 
         frame_count += 1
-
-        # Only run detection every 5th frame
         if frame_count % 5 != 0:
             continue
 
-        # Skip detection if still in cooldown
         if time.time() < cooldown_until:
             continue
 
         results = hands.process(rgb)
 
         if results.multi_hand_landmarks:
-            print("Hand detected! Triggering capture...")
-            try:
-                requests.post("http://127.0.0.1:5000/capture", data={"exposure":6})
-            except Exception as e:
-                print("Error triggering capture:", e)
+            num_hands = len(results.multi_hand_landmarks)
 
-            # Set cooldown (e.g. 6 seconds)
-            cooldown_until = time.time() + 6
+            # --- QUIT detection has priority ---
+            if num_hands == 2:
+                two_hand_frames += 1
+                if two_hand_frames >= 3:  # require 3 consecutive frames
+                    print("Two hands detected → quit")
+                    quit_app()
+                    break
+            else:
+                two_hand_frames = 0
+
+            # --- Capture only if not quitting ---
+            if num_hands == 1 and two_hand_frames == 0:
+                print("Single hand detected → capture")
+                try:
+                    requests.post("http://127.0.0.1:5000/capture", data={"exposure":6})
+                except Exception as e:
+                    print("Error triggering capture:", e)
+                cooldown_until = time.time() + 6
+        else:
+            two_hand_frames = 0
+
+
 
 # Start gesture detection in background
 gesture_thread = threading.Thread(target=gesture_loop, daemon=True)
@@ -113,6 +127,23 @@ def enforce_gallery_limit(limit=50):
 def index():
     state.scanner_active = True
     return render_template("index.html")
+
+def quit_app():
+    state.quit_requested = True
+    # Clean up resources before quitting
+    try:
+        hands.close()
+    except Exception:
+        pass
+    try:
+        picam2.stop()
+    except Exception:
+        pass
+
+    os._exit(0)
+    # sys.exit(0) 
+  
+
 
 @app.route("/capture", methods=["POST"])
 def capture():
