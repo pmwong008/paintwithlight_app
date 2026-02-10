@@ -74,14 +74,15 @@ def gesture_loop():
             print(f"Nose y: {nose.y:.2f}, Left wrist y: {left_wrist.y:.2f}, Right wrist y: {right_wrist.y:.2f}")
 
             # Only evaluate if landmarks are visible and nose is in a reasonable range 
-            if (nose.visibility > 0.5 
-                and left_wrist.visibility > 0.5 
-                and right_wrist.visibility > 0.5 
+            if (nose.visibility > 0.3 
+                and left_wrist.visibility > 0.3 
+                and right_wrist.visibility > 0.3 
                 and nose.y < 0.85):
 
                 # --- Quit detection (priority) ---
                 if left_wrist.y < nose.y and right_wrist.y < nose.y:
                     quit_frames += 1
+                    capture_frames = 0 # prevent capture firing at same time
                     if quit_frames >= 3:   # require 3 consecutive frames
                         print("Two wrists above nose → quit")
                         quit_app()
