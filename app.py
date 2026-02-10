@@ -18,8 +18,8 @@ os.makedirs("static/gallery", exist_ok=True)
 TEMP_FILE = "static/temp.jpg"
 
 # MediaPipe setup 
-mp_hands = mp.solutions.hands 
-hands = mp_hands.Hands()
+pose = mp.solutions.pose.Pose(min_detection_confidence=0.3,
+                              min_tracking_confidence=0.3)
 
 app = Flask(__name__)
 
@@ -33,10 +33,11 @@ picam2.start()
 last_gesture = None
 last_gesture_time = None
 
-
 def gesture_loop():
     frame_count = 0
     cooldown_until = 0
+    quit_frames = 0
+    capture_frames = 0
     two_hand_frames = 0
 
     while not state.quit_requested:
@@ -58,32 +59,52 @@ def gesture_loop():
         if time.time() < cooldown_until:
             continue
 
-        results = hands.process(rgb)
+        results = pose.process(rgb)
+        '''
+        if not results.pose_landmarks:
+            quit_frames = 0
+            capture_frames = 0
+            continue
+        '''
+        results = pose.process(rgb)
+        if results.pose_landmarks:
+            print("Pose landmarks detected")
+            landmarks = results.pose_landmarks.landmark
+            nose = landmarks[mp.solutions.pose.PoseLandmark.NOSE]
+            left_wrist = landmarks[mp.solutions.pose.PoseLandmark.LEFT_WRIST]
+            right_wrist = landmarks[mp.solutions.pose.PoseLandmark.RIGHT_WRIST]
+            print(f"Nose y: {nose.y:.2f}, Left wrist y: {left_wrist.y:.2f}, Right wrist y: {right_wrist.y:.2f}")
 
-        if results.multi_hand_landmarks:
-            num_hands = len(results.multi_hand_landmarks)
+            # Only evaluate if landmarks are visible and nose is in a reasonable range 
+            if (nose.visibility > 0.3 
+                and left_wrist.visibility > 0.3 
+                and right_wrist.visibility > 0.3 
+                and nose.y < 0.85):
 
-            # --- QUIT detection has priority ---
-            if num_hands == 2:
-                two_hand_frames += 1
-                if two_hand_frames >= 3:  # require 3 consecutive frames
-                    print("Two hands detected → quit")
-                    quit_app()
-                    break
-            else:
-                two_hand_frames = 0
+                # --- Quit detection (priority) ---
+                if left_wrist.y < nose.y and right_wrist.y < nose.y:
+                    quit_frames += 1
+                    capture_frames = 0 # prevent capture firing at same time
+                    if quit_frames >= 3:   # require 3 consecutive frames
+                        print("Two wrists above nose → quit")
+                        quit_app()
+                        # break
+                else:
+                    quit_frames = 0
 
-            # --- Capture only if not quitting ---
-            if num_hands == 1 and two_hand_frames == 0:
-                print("Single hand detected → capture")
-                try:
-                    requests.post("http://127.0.0.1:5000/capture", data={"exposure":6})
-                except Exception as e:
-                    print("Error triggering capture:", e)
-                cooldown_until = time.time() + 6
-        else:
-            two_hand_frames = 0
-
+                # --- Capture detection ---
+                if (left_wrist.y < nose.y) ^ (right_wrist.y < nose.y):  # exactly one wrist above
+                    capture_frames += 1
+                    if capture_frames >= 3:
+                        print("One wrist above nose → capture")
+                        try:
+                            requests.post("http://127.0.0.1:5000/capture", data={"exposure":6})
+                        except Exception as e:
+                            print("Error triggering capture:", e)
+                        cooldown_until = time.time() + 6
+                        capture_frames = 0
+                else:
+                    capture_frames = 0
 
 
 # Start gesture detection in background
@@ -122,6 +143,20 @@ def enforce_gallery_limit(limit=50):
         os.remove(os.path.join("static/gallery", oldest))
         print(f"Deleted old photo: {oldest}")
 
+def quit_app():
+    state.quit_requested = True
+    # Clean up resources before quitting
+    try:
+        pose.close()
+    except Exception:
+        pass
+    try:
+        picam2.stop()
+    except Exception:
+        pass
+
+    os._exit(0)
+    # sys.exit(0) 
 
 @app.route("/")
 def index():
