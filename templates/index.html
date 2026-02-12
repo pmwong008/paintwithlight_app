@@ -25,16 +25,27 @@
     </form>
     
 <script>
+    
 const slider = document.getElementById("exposure");
 const output = document.getElementById("exp_val");
-// slider.oninput = function() { output.innerText = this.value; }
-// output.innerText = slider.value;
 
-output.innerText = slider.value; // initialize display
-// Update display on slider change
-slider.oninput = function() {
+output.innerText = slider.value;
+
+slider.oninput = async function() {
   output.innerText = this.value;
+
+  try {
+    await fetch("/set_exposure", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `exposure=${encodeURIComponent(this.value)}`
+    });
+    console.log("Exposure updated:", this.value);
+  } catch (err) {
+    console.error("Failed to update exposure:", err);
+  }
 };
+
 
 let captureInProgress = false;
 let errorCount = 0;

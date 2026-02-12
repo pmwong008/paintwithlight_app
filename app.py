@@ -173,9 +173,22 @@ def index():
     state.scanner_active = True
     return render_template("index.html")
 
+@app.route("/set_exposure", methods=["POST"]) 
+def set_exposure(): 
+    try: 
+        state.exposure = int(request.form.get("exposure")) 
+        print(f"Exposure updated to {state.exposure}s") 
+        return jsonify({"message": f"Exposure set to {state.exposure}s"}), 200 
+    except Exception as e: 
+        print("Error setting exposure:", e) 
+        return jsonify({"message": "Invalid exposure value"}), 400
+
+
 @app.route("/capture", methods=["POST"])
 def capture():
-    print("Request form contents:", request.form) 
+    
+    exposure = state.exposure 
+    print(f"Starting capture with exposure={exposure}s")
 
     if state.capture_in_progress:
         return render_template("preview.html", message="Capture already in progress"), 429
@@ -184,7 +197,7 @@ def capture():
     state.capture_in_progress = True
 
     try:
-        exposure = int(request.form.get("exposure", 3))  # seconds
+        # exposure = getattr(state, "exposure", 6) # fallback to 6 if not set 
         print(f"Starting capture with exposure={exposure}s")
 
         frames = []
