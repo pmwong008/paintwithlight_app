@@ -7,12 +7,13 @@
     <h1>Nostalgic Photo Booth</h1>
     <img src="{{ url_for('video_feed') }}" width="640" height="360" alt="Live Preview">
 
-    <form action="{{ url_for('capture') }}" method="post">
+    <form id="shutterform">       
         <label for="exposure">Exposure (seconds):</label>
         <input type="range" id="exposure" name="exposure" min="3" max="12" step="1" value="6">
         <span id="exp_val">6</span>s
-        <button type="submit">Shutter</button>
+        <button id="shutter" type="submit">Shutter</button>
     </form>
+    <div id="message"></div>
     <div id="gesture-indicator" 
         style="display:none; color: red; font-weight: bold;">
         Gesture detected — capturing...
@@ -23,33 +24,88 @@
         <button type="submit">View Gallery</button>
     </form>
     
-
 <script>
-    const slider = document.getElementById("exposure");
-    const output = document.getElementById("exp_val");
-    slider.oninput = function() { output.innerText = this.value; }
+const slider = document.getElementById("exposure");
+const output = document.getElementById("exp_val");
+// slider.oninput = function() { output.innerText = this.value; }
+// output.innerText = slider.value;
 
-    setInterval(async () => {
-        try {
-            const response = await fetch("/status");
-            const data = await response.json();
+output.innerText = slider.value; // initialize display
+// Update display on slider change
+slider.oninput = function() {
+  output.innerText = this.value;
+};
 
-            // Show indicator if capture is in progress
-            if (data.capture_in_progress) {
-                document.getElementById("gesture-indicator").style.display = "block";
-            } else {
-                document.getElementById("gesture-indicator").style.display = "none";
-            }
+let captureInProgress = false;
+let errorCount = 0;
 
-            // Redirect to review page once capture is ready
-            if (data.captured) {
-                window.location.href = "/review";
-            }
-        } catch (err) {
-            console.error("Polling error:", err);
-        }
-    }, 2000);
+// Poll /status every 2s
+const poller = setInterval(async () => {
+  try {
+    const response = await fetch("/status");
+    const data = await response.json();
+    errorCount = 0; // reset error count on success
+    captureInProgress = data.capture_in_progress;
+
+    // Toggle shutter button availability
+    const shutterBtn = document.getElementById("shutter");
+    shutterBtn.disabled = captureInProgress;
+
+    // Show indicator if capture is in progress
+    document.getElementById("gesture-indicator").style.display =
+      captureInProgress ? "block" : "none";
+
+    // Redirect to review page once capture is ready
+    if (data.captured) {
+        clearInterval(poller); // stop polling
+      window.location.href = "/review";
+    }
+  } catch (err) {
+    errorCount++;
+    clearInterval(poller); // stop polling on error
+    document.getElementById("message").textContent = "Server stopped. Preview unavailable.";
+    console.error("Polling error:", err);
+  }
+}, 2000);
+
+// Async function to trigger capture
+async function triggerCapture() {
+  const exposure = slider.value;
+  console.log("Triggering capture with front end JS, exposure:", exposure);
+
+  try {
+    const response = await fetch("/capture", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `exposure=${encodeURIComponent(exposure)}`
+    });
+
+    if (response.status === 429) {
+      document.getElementById("message").textContent = "Capture already in progress…";
+      return;
+    }
+
+    if (response.ok) {
+      const html = await response.text();
+      document.body.innerHTML = html; // show review page
+    } else {
+      document.getElementById("message").textContent = "Capture failed.";
+    }
+  } catch (err) {
+    console.error("Error:", err);
+    document.getElementById("message").textContent = "Error contacting server.";
+  }
+}
+
+// Hook shutter button to async function
+document.getElementById("shutter").addEventListener("click", (e) => {
+  e.preventDefault(); // prevent default form POST
+  if (!captureInProgress) {
+    triggerCapture();
+  }
+});
 </script>
+
 
 
 

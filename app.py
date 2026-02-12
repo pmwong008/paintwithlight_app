@@ -76,9 +76,9 @@ def gesture_loop():
             print(f"Nose y: {nose.y:.2f}, Left wrist y: {left_wrist.y:.2f}, Right wrist y: {right_wrist.y:.2f}")
 
             # Only evaluate if landmarks are visible and nose is in a reasonable range 
-            if (nose.visibility > 0.3 
-                and left_wrist.visibility > 0.3 
-                and right_wrist.visibility > 0.3 
+            if (nose.visibility > 0.5 
+                and left_wrist.visibility > 0.5 
+                and right_wrist.visibility > 0.5 
                 and nose.y < 0.85):
 
                 # --- Quit detection (priority) ---
@@ -95,13 +95,9 @@ def gesture_loop():
                 # --- Capture detection ---
                 if (left_wrist.y < nose.y) ^ (right_wrist.y < nose.y):  # exactly one wrist above
                     capture_frames += 1
-                    if capture_frames >= 3:
+                    if capture_frames >= 3 and time.time() >= cooldown_until:  # require 3 consecutive frames
                         print("One wrist above nose → capture")
-                        try:
-                            requests.post("http://127.0.0.1:5000/capture", data={"exposure":6})
-                        except Exception as e:
-                            print("Error triggering capture:", e)
-                        cooldown_until = time.time() + 6
+                        trigger_capture()
                         capture_frames = 0
                 else:
                     capture_frames = 0
@@ -114,6 +110,7 @@ gesture_thread.start()
 def generate_frames():
     while True:
         frame = picam2.capture_array()
+        # frame = cv2.flip(frame, 1)  # mirror preview image
         ret, buffer = cv2.imencode('.jpg', frame)
         if not ret:
             continue
@@ -143,6 +140,19 @@ def enforce_gallery_limit(limit=50):
         os.remove(os.path.join("static/gallery", oldest))
         print(f"Deleted old photo: {oldest}")
 
+def trigger_capture(exposure=6):
+    try:
+        r = requests.post("http://127.0.0.1:5000/capture", data={"exposure":exposure})
+        if r.status_code == 200:
+            print("Capture triggered successfully")
+        else:            
+            print(f"Failed to trigger capture: {r.status_code} - {r.text}")
+    except Exception as e:
+        print("Error triggering capture:", e)
+
+    global cooldown_until
+    cooldown_until = time.time() + exposure  # prevent multiple triggers in quick succession
+
 def quit_app():
     state.quit_requested = True
     # Clean up resources before quitting
@@ -163,27 +173,13 @@ def index():
     state.scanner_active = True
     return render_template("index.html")
 
-def quit_app():
-    state.quit_requested = True
-    # Clean up resources before quitting
-    try:
-        hands.close()
-    except Exception:
-        pass
-    try:
-        picam2.stop()
-    except Exception:
-        pass
-
-    os._exit(0)
-    # sys.exit(0) 
-  
-
-
 @app.route("/capture", methods=["POST"])
 def capture():
+    print("Request form contents:", request.form) 
+
     if state.capture_in_progress:
-        return jsonify({"message": "Capture already in progress"}), 429
+        return render_template("preview.html", message="Capture already in progress"), 429
+
     
     state.capture_in_progress = True
 
