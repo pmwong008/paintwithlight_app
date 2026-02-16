@@ -18,8 +18,8 @@ os.makedirs("static/gallery", exist_ok=True)
 TEMP_FILE = "static/temp.jpg"
 
 # MediaPipe setup 
-pose = mp.solutions.pose.Pose(min_detection_confidence=0.3,
-                              min_tracking_confidence=0.3)
+pose = mp.solutions.pose.Pose(min_detection_confidence=0.5,
+                              min_tracking_confidence=0.5)
 
 app = Flask(__name__)
 

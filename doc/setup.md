@@ -11,16 +11,34 @@ The goal: package everything into a single SD card image, so each Pi boots direc
 - Boot the Pi and update packages:
   ```bash
   sudo apt update && sudo apt upgrade -y
+  ```
 
------------------ install dependencies
 
-sudo apt install -y python3 python3-pip python3-opencv libatlas-base-dev
+## Install dependencies
 
-pip3 install flask mediapipe requests
+### System packages (install with apt)
+These are OS‑level packages needed on Raspberry Pi / Debian systems:
+
+```bash
+sudo apt update
+sudo apt install -y \
+  python3 \
+  python3-pip \
+  python3-opencv \
+  libatlas-base-dev \
+  python3-picamera2 \
+  libcamera-apps \
+  python3-pil
+```
+
+## OR 
+
+`sudo apt install $(cat system-requirements.txt)`
+
 
 ----------------- enable camera support
 
-sudo raspi-config
+`sudo raspi-config`
 
 ----------------- Go to Interface Options → Camera → Enable. Reboot.
 
@@ -43,8 +61,7 @@ sudo raspi-config
 
 - Create a service file so the app runs on boot:
 
-```bash
-sudo nano /etc/systemd/system/paintwithlight_app.service
+`sudo nano /etc/systemd/system/paintwithlight_app.service`
 
 --------------------------
 [Unit]
@@ -65,9 +82,11 @@ WantedBy=multi-user.target
 
 ## 5. Enable and Start Service
 
+```bash
 sudo systemctl daemon-reload
 sudo systemctl enable paintwithlight_app.service
 sudo systemctl start paintwithlight_app.service
+```
 
 - Check Status: `sudo systemctl status photoapp.service`
 - Logs: `journalctl -u photoapp.service -f`
@@ -97,25 +116,35 @@ To keep the app self‑contained, use a Python virtual environment (`venv`).
 This isolates dependencies from the system Python and makes the SD image reproducible.
 
 ### Create and activate venv
+
 ```bash
 cd /home/pi/REPO
 python3 -m venv venv
 source venv/bin/activate
+```
 
 ### Install dependencies inside venv
+```bash
 pip install --upgrade pip
-pip install flask mediapipe requests opencv-python
+pip install flask mediapipe requests opencv-python numpy python-dotenv
+```
 
 ### Freeze requirements
-pip freeze > requirements.txt
+`pip freeze > requirements.lock`
 
-### Reinstall from requirements.txt
-
-On a fresh Pi
-
+### Reinstall On a fresh Pi
+```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+```
+
+## run for essentials
+
+`pip install -r requirements.txt`
+
+## run for exact versions
+
+`pip install -r requirements.lock`
 
 Update the service file to run inside the virtual environment:
 

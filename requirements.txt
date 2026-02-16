@@ -1,4 +1,9 @@
 flask
-numpy
-pillow
+picamera2
 opencv-python
+numpy
+mediapipe
+python-dotenv
+requests
+pil
+
