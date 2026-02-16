@@ -156,6 +156,25 @@ User=pi
 Environment=FLASK_ENV=production
 
 
+## Project Structure
+
+project/
+│
+├── app.py                  # Entry point: creates Flask app, registers blueprints
+├── core/                   # Package folder for your modules
+│   ├── __init__.py         # Marks this as a Python package
+│   ├── routes.py           # Flask routes (Blueprint)
+│   ├── frames.py           # Frame capture, generate_frames, stack_frames, trigger_capture
+│   ├── threads.py          # gesture_loop, thread configs
+│   ├── gallery.py          # enforce_gallery_limit, gallery utilities
+│   └── state.py            # Shared state (exposure, flags, etc.)
+│
+├── requirements.txt
+├── requirements.lock
+├── system-requirements.txt
+└── setup.md
+
+
 
 
 
