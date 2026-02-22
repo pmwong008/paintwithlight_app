@@ -63,8 +63,8 @@ def controller_loop(state):
 
 
 if __name__ == "__main__":
-    # init_camera()  # Initialize camera at the start of the application
-    # print("Camera initialized in main app")
+    init_camera()  # Initialize camera at the start of the application
+    print("Camera initialized in main app")
 
     state = State()
 

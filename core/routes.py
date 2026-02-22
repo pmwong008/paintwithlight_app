@@ -1,17 +1,20 @@
-from flask import Blueprint, bp, render_template, Response, jsonify, request, redirect, url_for
-from .frames import generate_frames, capture_frame, stack_frames, trigger_capture
-from .state import state
+from flask import Blueprint, render_template, Response, jsonify, request, redirect, url_for
+from core.frames import generate_frames, capture_frame, stack_frames, trigger_capture
+from core.state import State
+# from .camera import picam, init_camera, close_camera    
 import time
 import os
-from .threads import start_frame_thread
-from picamera2 import Picamera2
-import cv2
-from .gallery import enforce_gallery_limit
+from core.threads import start_frame_thread
 
-bp = Blueprint('main', __name__)
-picam = Picamera2()
+import cv2
+from core.gallery import enforce_gallery_limit
+
+bp = Blueprint('core', __name__)
+
+
 TEMP_FILE = "static/temp.jpg"
 cv2 = None
+state = State()
 
 @bp.route('/')
 def index():
@@ -25,116 +28,89 @@ def frame():
 
 @bp.route('/status')
 def status():
-    return jsonify({"status": "ok"})
+    return jsonify({
+        "exposure": state.exposure,
+        "capture_requested": state.capture_requested,
+        "capture_in_progress": state.capture_in_progress,
+        "capture_done": state.capture_done,
+        "cooldown_remaining": state.cooldown_remaining()
+        # "scanner_active": state.scanner_active
+    })
 
 @bp.route("/set_exposure", methods=["POST"]) 
 def set_exposure(): 
-    try: 
-        state.exposure = int(request.form.get("exposure")) 
-        print(f"Exposure updated to {state.exposure}s") 
-        return jsonify({"message": f"Exposure set to {state.exposure}s"}), 200 
+    
+    data = request.get_json()
+    
+    try:
+        exposure_value = int(data.get("exposure", 6))  # default to 6 if not provided
+        state = State()
+        state.exposure = exposure_value
+        print(f"Exposure updated to {state.exposure}s")
+        return jsonify({"message": f"Exposure set to {state.exposure}s"}), 200
+
     except Exception as e: 
         print("Error setting exposure:", e) 
         return jsonify({"message": "Invalid exposure value"}), 400
 
 
 @bp.route("/capture", methods=["POST"])
-def capture():
-    
-    exposure = state.exposure 
-    print(f"Starting capture with exposure={exposure}s")
-
-    if state.capture_in_progress:
-        return render_template("preview.html", message="Capture already in progress"), 429
-
-    
-    state.capture_in_progress = True
-
+def capture_route():
+    state = State()
     try:
-        # exposure = getattr(state, "exposure", 6) # fallback to 6 if not set 
-        print(f"Starting capture with exposure={exposure}s")
-
-        frames = []
-        start = time.time()
-
-        # Capture frames during exposure
-        while time.time() - start < exposure:
-            frame = picam.capture_array()
-            if frame is None:
-                print("Warning: Frame returned None, skipping")
-                # raise ValueError("Camera returned no frame")
-                continue
-            else:
-                print(f"Captured frame with shape {frame.shape}")
-            frames.append(frame)
-            print(f"Captured frame {len(frames)} with shape {frame.shape}")
-            time.sleep(0.05)  # ~5 fps
-
-        if not frames:
-            raise RuntimeError("No frames captured during exposure")
-
-        # Stack frames into one image
-        stacked = stack_frames(frames)
-        print(f"Stacked image shape: {stacked.shape}")
-
-        # Ensure static folder exists
-        os.makedirs("static", exist_ok=True)
-        cv2.imwrite(TEMP_FILE, stacked)
-        print(f"Saved stacked image to {TEMP_FILE}")
-        state.capture_done = True
-        # return jsonify({"message": "Capture complete"})
-        return render_template("review.html", filename=TEMP_FILE)
-
+        result = trigger_capture()
+        if result:
+            return jsonify({
+                "message": "Capture executed",
+                "exposure": state.exposure,
+                "cooldown_remaining": state.cooldown_remaining()
+            })
+        else:
+            return jsonify({"error": "Capture failed"}), 500
     except Exception as e:
-        # Log error to console for debugging
-        print("Error in capture():", e)
+        print("Error in /capture:", e)
+        return jsonify({"error": "Unexpected failure", "details": str(e)}), 500
 
-        # Return a friendly error page
-        return f"""
-        <h1>Capture Failed</h1>
-        <p>Something went wrong: {e}</p>
-        <p><a href='{url_for("index")}'>Back to preview</a></p>
-        """, 500
     
     finally:
         state.capture_in_progress = False
 
 @bp.route("/review")
 def review():
-    state.scanner_active = False
-    # Make sure temp.jpg exists before rendering
-    if os.path.exists("static/temp.jpg"):
-        return render_template("review.html", file="temp.jpg")
-    else:
-        # If no temp image, go back to index
-        return redirect(url_for("index"))
+    return render_template("review.html")
 
 @bp.route("/keep", methods=["POST"])
-def keep():
-    
-    timestamp = int(time.time())
-    saved_file = f"static/gallery/photo_{timestamp}.jpg"
-    
-    os.rename(TEMP_FILE, saved_file)
-    enforce_gallery_limit()
-    state.capture_done = False  # Reset capture_done flag
-    return redirect(url_for("index"))
+def keep_capture():
+    state = State()
+    temp_path = os.path.join("static/gallery", "temp.jpg")
+    if os.path.exists(temp_path):
+        filename = f"capture_{int(time.time())}.jpg"
+        new_path = os.path.join("static/gallery", filename)
+        os.rename(temp_path, new_path)
+        state.gallery.append(filename)
+        if len(state.gallery) > 50:
+            state.gallery.pop(0)
+        return jsonify({"message": "Capture kept", "file": filename})
+    return jsonify({"error": "No temp capture found"}), 404
 
 @bp.route("/discard", methods=["POST"])
-def discard():
-    if os.path.exists(TEMP_FILE):
-        os.remove(TEMP_FILE)
-    state.capture_done = False  # Reset capture_done flag
-    return redirect(url_for("index"))
+def discard_capture():
+    temp_path = os.path.join("static/gallery", "temp.jpg")
+    if os.path.exists(temp_path):
+        os.remove(temp_path)
+        return jsonify({"message": "Capture discarded"})
+    return jsonify({"error": "No temp capture found"}), 404
+
 
 @bp.route("/video_feed")
 def video_feed():
+    print("Starting video feed...")
     return Response(generate_frames(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @bp.route("/gallery")
 def gallery():
-    state.scanner_active = False
+    State.scanner_active = False
     files = [f for f in os.listdir("static/gallery") if f.endswith(".jpg")]
     # Sort by timestamp (newest first)
     files.sort(reverse=True)

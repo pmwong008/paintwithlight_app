@@ -1,22 +1,34 @@
-from picamera2 import Picamera2
+from core.camera import picam
 import cv2
 import numpy as np
 import os
 import time
 import requests
-from .state import state
+from core.state import state
 
-picam = Picamera2()
-
-def init_camera():
-    picam.start()
 
 def capture_frame():
+    if picam is None:
+        raise RuntimeError("Camera not initialized")
     frame = picam.capture_array()
+    if frame is None:
+        raise RuntimeError("No frame captured")
     return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-def close_camera():
-    picam.stop()
+def generate_frames():
+    while True:
+        try:
+            frame = capture_frame()
+            success, buffer = cv2.imencode('.jpg', cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+            if not success:
+                continue
+            frame_bytes = buffer.tobytes()
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        except Exception as e:
+            print("Error in generate_frames:", e)
+            break
+'''
 
 def trigger_capture(exposure=6):
     try:
@@ -30,6 +42,7 @@ def trigger_capture(exposure=6):
 
     global cooldown_until
     cooldown_until = time.time() + exposure  # prevent multiple triggers in quick succession
+
 def generate_frames():
     while True:
         frame = picam.capture_array()
@@ -40,7 +53,7 @@ def generate_frames():
         frame_bytes = buffer.tobytes()
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-
+'''
 def stack_frames(frames):
     print(f"Stacking {len(frames)} frames...")
     stacked = frames[0].astype(np.float32) / 255.0
