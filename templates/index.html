@@ -5,7 +5,7 @@
 </head>
 <body>
     <h1>Nostalgic Photo Booth</h1>
-    <img src="{{ url_for('video_feed') }}" width="640" height="360" alt="Live Preview">
+    <img src="{{ url_for('main.video_feed') }}" width="640" height="360" alt="Live Preview">
 
     <form id="shutterform">       
         <label for="exposure">Exposure (seconds):</label>
@@ -20,7 +20,7 @@
     </div>
 
 
-    <form action="{{ url_for('gallery') }}" method="get">
+    <form action="{{ url_for('main.gallery') }}" method="get">
         <button type="submit">View Gallery</button>
     </form>
     

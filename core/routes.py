@@ -1,16 +1,15 @@
 from flask import Blueprint, render_template, Response, jsonify, request, redirect, url_for
-from core.frames import generate_frames, capture_frame, stack_frames, trigger_capture
+from core.camera_frames import generate_frames, capture_frame, stack_frames
 from core.state import State
 # from .camera import picam, init_camera, close_camera    
 import time
 import os
-from core.threads import start_frame_thread
+from core.threads import gesture_loop
 
 import cv2
 from core.gallery import enforce_gallery_limit
 
-bp = Blueprint('core', __name__)
-
+bp = Blueprint('main', __name__)
 
 TEMP_FILE = "static/temp.jpg"
 cv2 = None
@@ -20,12 +19,6 @@ state = State()
 def index():
     return render_template('index.html')
 
-@bp.route('/frame')
-def frame():
-    frame = capture_frame()
-    # convert frame to JPEG response
-    return Response(frame, mimetype='image/jpeg')
-
 @bp.route('/status')
 def status():
     return jsonify({
@@ -33,7 +26,7 @@ def status():
         "capture_requested": state.capture_requested,
         "capture_in_progress": state.capture_in_progress,
         "capture_done": state.capture_done,
-        "cooldown_remaining": state.cooldown_remaining()
+        "cooldown_remaining": state.cooldown_remaining(),
         # "scanner_active": state.scanner_active
     })
 
@@ -53,27 +46,38 @@ def set_exposure():
         print("Error setting exposure:", e) 
         return jsonify({"message": "Invalid exposure value"}), 400
 
+# core/routes.py
+@bp.route("/shutter", methods=["POST"])
+def shutter():
+    if state.cooldown_remaining() > 0:
+        return jsonify({
+            "message": "Capture on cooldown",
+            "cooldown_remaining": state.cooldown_remaining()
+        }), 429
+
+    state.request_capture()
+    return jsonify({"message": "Shutter pressed, capture requested"})
+
+
+# Assume `state` is imported or passed in from app.py
+# If not, you can inject it via app context or a global
 
 @bp.route("/capture", methods=["POST"])
-def capture_route():
-    state = State()
-    try:
-        result = trigger_capture()
-        if result:
-            return jsonify({
-                "message": "Capture executed",
-                "exposure": state.exposure,
-                "cooldown_remaining": state.cooldown_remaining()
-            })
-        else:
-            return jsonify({"error": "Capture failed"}), 500
-    except Exception as e:
-        print("Error in /capture:", e)
-        return jsonify({"error": "Unexpected failure", "details": str(e)}), 500
+def capture():
+    if state.cooldown_remaining() > 0:
+        return jsonify({
+            "message": "Capture on cooldown",
+            "cooldown_remaining": state.cooldown_remaining()
+        }), 429  # Too Many Requests
 
-    
-    finally:
-        state.capture_in_progress = False
+    # Trigger capture
+    state.request_capture()
+    return jsonify({
+        "message": "Capture requested",
+        "capture_requested": state.capture_requested,
+        "capture_in_progress": state.capture_in_progress
+    })
+
 
 @bp.route("/review")
 def review():
@@ -81,12 +85,12 @@ def review():
 
 @bp.route("/keep", methods=["POST"])
 def keep_capture():
-    state = State()
     temp_path = os.path.join("static/gallery", "temp.jpg")
     if os.path.exists(temp_path):
         filename = f"capture_{int(time.time())}.jpg"
         new_path = os.path.join("static/gallery", filename)
         os.rename(temp_path, new_path)
+        
         state.gallery.append(filename)
         if len(state.gallery) > 50:
             state.gallery.pop(0)
@@ -110,7 +114,8 @@ def video_feed():
 
 @bp.route("/gallery")
 def gallery():
-    State.scanner_active = False
+    # ensure scanner is off when viewing gallery
+    state.scanner_active = False 
     files = [f for f in os.listdir("static/gallery") if f.endswith(".jpg")]
     # Sort by timestamp (newest first)
     files.sort(reverse=True)

@@ -1,13 +1,13 @@
-from core.camera import picam
+from camera_frames import picam
 import cv2
 import numpy as np
 import os
 import time
 import requests
-from core.state import state
-
+from core.state import State
 
 def capture_frame():
+    
     if picam is None:
         raise RuntimeError("Camera not initialized")
     frame = picam.capture_array()
@@ -28,21 +28,18 @@ def generate_frames():
         except Exception as e:
             print("Error in generate_frames:", e)
             break
+
+
+def trigger_capture(state):
+    if state.cooldown_remaining() > 0:
+        print("Capture on cooldown, cannot trigger capture")
+        return False
+    
+    state.request_capture()
+    print("Capture requested")
+    return True
+    
 '''
-
-def trigger_capture(exposure=6):
-    try:
-        r = requests.post("http://127.0.0.1:5000/capture", data={"exposure":exposure})
-        if r.status_code == 200:
-            print("Capture triggered successfully")
-        else:            
-            print(f"Failed to trigger capture: {r.status_code} - {r.text}")
-    except Exception as e:
-        print("Error triggering capture:", e)
-
-    global cooldown_until
-    cooldown_until = time.time() + exposure  # prevent multiple triggers in quick succession
-
 def generate_frames():
     while True:
         frame = picam.capture_array()

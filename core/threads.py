@@ -1,15 +1,11 @@
 import threading
 import time
-from .frames import capture_frame, trigger_capture
-from .state import state
-from picamera2 import Picamera2
+from core.state import State
+from core.camera_frames import picam, init_camera, close_camera,capture_frame, stack_frames
 import cv2
 import mediapipe as mp
 
-
-picam = Picamera2()
 pose = mp.solutions.pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
-
 
 def frame_worker(stop_event):
     while not stop_event.is_set():
@@ -23,6 +19,21 @@ def start_frame_thread():
     t.start()
     return t, stop_event
 
+# core/threads.py
+def gesture_loop(state):
+    while state.is_running():
+        gesture_detected = check_for_gesture()  # however you detect gestures
+        if gesture_detected and state.cooldown_remaining() == 0:
+            print("Gesture detected → requesting capture")
+            state.request_capture()
+        time.sleep(0.1)
+
+def check_for_gesture():
+    # Placeholder for actual gesture detection logic using Mediapipe or similar
+    return False
+
+
+'''
 def gesture_loop():
     frame_count = 0
     cooldown_until = 0
@@ -50,12 +61,12 @@ def gesture_loop():
             continue
 
         results = pose.process(rgb)
-        '''
+        
         if not results.pose_landmarks:
             quit_frames = 0
             capture_frames = 0
             continue
-        '''
+        
         results = pose.process(rgb)
         if results.pose_landmarks:
             print("Pose landmarks detected")
@@ -91,3 +102,30 @@ def gesture_loop():
                         capture_frames = 0
                 else:
                     capture_frames = 0
+'''
+
+# core/threads.py
+
+def controller_loop(state):
+    while state.is_running():
+        if state.capture_requested and not state.capture_in_progress:
+            state.capture_in_progress = True
+            print("Controller: capture started")
+
+            try:
+                # Capture multiple frames for stacking
+                frames = [capture_frame() for _ in range(5)]
+                stacked = stack_frames(frames)
+
+                # Save to temp.jpg
+                cv2.imwrite("static/temp.jpg", cv2.cvtColor(stacked, cv2.COLOR_RGB2BGR))
+                print("Controller: stacked image saved to static/temp.jpg")
+                state.finish_capture()
+
+            except Exception as e:
+                print("Controller: error during capture", e)
+                state.capture_in_progress = False
+                state.capture_requested = False
+
+        time.sleep(0.1)
+
