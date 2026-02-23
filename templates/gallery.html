@@ -3,15 +3,25 @@
 <head>
     <title>Gallery</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-
+    <style> 
+      .gallery-item { 
+        display: inline-block; 
+        margin: 5px; 
+        border: 2px solid transparent; 
+      } 
+      .active { 
+        border: 2px solid red; /* highlight active image */ 
+      } 
+    </style>
 </head>
 <body>
     <h1> Images Gallery</h1>
     <p><a href="{{ url_for('main.index') }}"><button>Back to Camera</button></a></p>
 
-    <div id="gallery" style="display:flex; flex-wrap:wrap;">
+    <div class="gallery" id="gallery" style="display:flex; flex-wrap:wrap;">
         {% for file in files %}
-            <div class="gallery-item" style="margin:10px;">
+            <div class="gallery-item" {% if loop.index0 == current_index %}class="active"{% endif %}>
+
                 <img src="{{ url_for('static', filename='gallery/' + file) }}" 
                 alt="captured"     
                 class="gallery-photo"

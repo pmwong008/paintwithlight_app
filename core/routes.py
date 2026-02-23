@@ -1,10 +1,10 @@
 from flask import Blueprint, render_template, Response, jsonify, request, redirect, url_for
 from core.camera_frames import generate_frames, capture_frame, stack_frames
-from core.state import State
-# from .camera import picam, init_camera, close_camera    
+from core.state import state
+ 
 import time
 import os
-from core.threads import gesture_loop
+from core.threads import trigger_capture, gesture_loop
 
 import cv2
 from core.gallery import enforce_gallery_limit
@@ -13,10 +13,10 @@ bp = Blueprint('main', __name__)
 
 TEMP_FILE = "static/temp.jpg"
 cv2 = None
-state = State()
 
 @bp.route('/')
 def index():
+    state.gesture_mode = "capture"
     return render_template('index.html')
 
 @bp.route('/status')
@@ -31,17 +31,14 @@ def status():
     })
 
 @bp.route("/set_exposure", methods=["POST"]) 
+
 def set_exposure(): 
-    
     data = request.get_json()
-    
     try:
         exposure_value = int(data.get("exposure", 6))  # default to 6 if not provided
-        state = State()
-        state.exposure = exposure_value
-        print(f"Exposure updated to {state.exposure}s")
-        return jsonify({"message": f"Exposure set to {state.exposure}s"}), 200
-
+        state.set_exposure(exposure_value)
+        print(f"Exposure updated to {state.get_exposure()}s")
+        return jsonify({"message": f"Exposure set to {state.get_exposure()}s"}), 200
     except Exception as e: 
         print("Error setting exposure:", e) 
         return jsonify({"message": "Invalid exposure value"}), 400
@@ -81,6 +78,7 @@ def capture():
 
 @bp.route("/review")
 def review():
+    state.gesture_mode = "review"
     return render_template("review.html")
 
 @bp.route("/keep", methods=["POST"])
@@ -115,11 +113,13 @@ def video_feed():
 @bp.route("/gallery")
 def gallery():
     # ensure scanner is off when viewing gallery
-    state.scanner_active = False 
+    state.gesture_mode = "gallery"
+    print("Loading gallery mode for scanning gestures...")
     files = [f for f in os.listdir("static/gallery") if f.endswith(".jpg")]
     # Sort by timestamp (newest first)
     files.sort(reverse=True)
-    return render_template("gallery.html", files=files)
+    state.gallery_index = min(state.gallery_index, len(files)-1)  # Ensure index is in bounds
+    return render_template("gallery.html", files=files, current_index=state.gallery_index)
 
 '''
 @bp.route("/share/<filename>", methods=["POST"])
@@ -148,3 +148,12 @@ def share(filename):
         return jsonify({"message": f"Error sending email: {e}"}), 500
 '''
 
+# Temporary route for Chrome DevTools probing (can be removed later)
+@bp.route("/.well-known/appspecific/com.chrome.devtools.json")
+def chrome_probe():
+    return jsonify({})
+
+@bp.route("/trigger_capture", methods=["POST"])
+def trigger_capture_route():
+    trigger_capture()
+    return {"status": "capture requested"}

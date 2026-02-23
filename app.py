@@ -1,17 +1,15 @@
+import cv2
 from flask import Flask, render_template, Response, jsonify, request, redirect, url_for
 from core.routes import bp
 from core.threads import controller_loop, gesture_loop
 
 # from core.frames import capture_frame, trigger_capture
-from core.state import State
-from core.camera_frames import init_camera, close_camera
+from core.state import state
+from core.camera_frames import close_camera
 import threading
 import time
 
 app = Flask(__name__)
-
-# Keep references to State and threads so they don't get garbage collected
-state = State()
 
 # init_camera()  # Initialize camera at the start of the application
 
@@ -37,6 +35,12 @@ def quit_app(threads, stop_events):
 
 # controller in app.py
 
+def init_camera():
+    state.camera = cv2.VideoCapture(0)  # or your camera index
+    if not state.camera.isOpened():
+        print("Error: Could not open camera.")
+        raise RuntimeError("Camera initialization failed")
+    print("Camera initialized successfully")
 
 if __name__ == "__main__":
     init_camera()  # Initialize camera at the start of the application
@@ -44,7 +48,7 @@ if __name__ == "__main__":
 
     controller_thread = threading.Thread(
         target=controller_loop, 
-        args=(state,), 
+        # args=(state,), 
         daemon=True
     )
     controller_thread.start()
@@ -52,7 +56,7 @@ if __name__ == "__main__":
 
     gesture_thread = threading.Thread(
         target=gesture_loop, 
-        args=(state,), 
+        # args=(state,), 
         daemon=True
     )
     gesture_thread.start()

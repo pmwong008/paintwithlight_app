@@ -1,8 +1,12 @@
-from picamera2 import Picamera2
+# from picamera2 import Picamera2
 import os
 import cv2
 import numpy as np
 
+from core.state import state
+
+
+'''
 picam = None
 
 def init_camera():
@@ -10,7 +14,8 @@ def init_camera():
     if picam is None:
         try:
             picam = Picamera2()
-            picam.configure(picam.create_preview_configuration())
+            config = picam.create_preview_configuration(main={"format": "RGB888", "size": (1280, 720)})
+            picam.configure(config)
             picam.start()
             print("Camera initialized in process:", os.getpid())    
         except RuntimeError as e:
@@ -28,17 +33,30 @@ def restart_camera():
             print("Camera restarted successfully")
         except Exception as e:
             print("Error stopping camera during restart:", e)
+'''
+
+
+def restart_camera():
+    if state.camera is not None:
+        try:
+            state.camera.release()
+            print("Camera released")
+        except Exception as e:
+            print("Error releasing camera during restart:", e)
+
+    # Reinitialize
+    state.camera = cv2.VideoCapture(0)
+    if not state.camera.isOpened():
+        raise RuntimeError("Failed to restart camera")
+    print("Camera restarted successfully")
 
 def close_camera():
-    global picam
-    if picam:
-        try:
-            picam.stop()
-            print("Camera stopped")
-        except Exception as e:
-            print("Error stopping camera:", e)
-        picam = None
+    state.running = False
+    if state.camera:
+        state.camera.release()
+        print("Camera released")
 
+'''
 def apply_exposure(exposure_value):
     """Map slider value (0-100) to hardware exposure time."""
     if not picam:
@@ -60,6 +78,37 @@ def capture_frame():
     if frame is None:
         raise RuntimeError("No frame captured")
     return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+'''
+
+
+
+def apply_exposure(exposure_value: int):
+    """Map slider value (0-100) to cv2 exposure setting."""
+    if state.camera is None or not state.camera.isOpened():
+        print("Camera not initialized")
+        return
+
+    # Example mapping: 0–100 → -7 to -1 (common v4l2 range)
+    # Adjust mapping depending on your driver
+    exposure_setting = int(-7 + (exposure_value / 100.0) * 6)
+
+    try:
+        state.camera.set(cv2.CAP_PROP_EXPOSURE, exposure_setting)
+        print(f"Exposure set to {exposure_setting}")
+    except Exception as e:
+        print("Error setting exposure:", e)
+
+def capture_frame():
+    if state.camera is None or not state.camera.isOpened():
+        raise RuntimeError("Camera not initialized")
+
+    success, frame = state.camera.read()
+    if not success or frame is None:
+        raise RuntimeError("No frame captured")
+
+    # Convert BGR (OpenCV default) to RGB
+    return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
 
 def generate_frames():
     while True:
@@ -75,7 +124,7 @@ def generate_frames():
             print("Error in generate_frames:", e)
             break
 
-
+'''
 def trigger_capture(state):
     if state.cooldown_remaining() > 0:
         print("Capture on cooldown, cannot trigger capture")
@@ -85,7 +134,7 @@ def trigger_capture(state):
     print("Capture requested")
     return True
     
-'''
+
 def generate_frames():
     while True:
         frame = picam.capture_array()

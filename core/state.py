@@ -10,13 +10,15 @@ class State:
         self._lock = threading.Lock()
         self.running = True  # Flag to control the main loop
         self.exposure = 0.5
-        self.gallery = []  # List of captured image paths
+        self.gallery = []  # List of captured images (file paths)
+        self.gallery_index = 0  # Index of the current gallery image
 
         # Capture workflow flags
         self.capture_requested = False
         self.capture_in_progress = False
         self.capture_done = False
-
+        self.gesture_mode = "idle"  # can be "idle", "capture_requested", "capturing", "cooldown"
+        self.camera = None  # Placeholder for camera object
         # Cooldown tracking
         self._cooldown_until = 0
 
@@ -61,5 +63,7 @@ class State:
     def is_running(self) -> bool:
         with self._lock:
             return self.running
+        
+state = State()  # Global state instance
     
 
