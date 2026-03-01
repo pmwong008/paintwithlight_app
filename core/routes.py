@@ -9,6 +9,7 @@ from core.threads import trigger_capture, gesture_loop
 import cv2
 from core.gallery import enforce_gallery_limit
 
+
 bp = Blueprint('main', __name__)
 
 TEMP_FILE = "static/temp.jpg"
@@ -17,10 +18,16 @@ cv2 = None
 @bp.route('/')
 def index():
     state.gesture_mode = "capture"
+    if state.ready_for_review:
+        state.ready_for_review = False
+        return redirect(url_for("main.review"))
     return render_template('index.html')
 
 @bp.route('/status')
 def status():
+    # if state.ready_for_review:
+        # state.ready_for_review = False  # reset flag after reporting
+        # return redirect(url_for('main.review'))
     return jsonify({
         "exposure": state.exposure,
         "capture_requested": state.capture_requested,
@@ -76,32 +83,56 @@ def capture():
     })
 
 
+
 @bp.route("/review")
 def review():
-    state.gesture_mode = "review"
-    return render_template("review.html")
+    try:
+        # Try to open or stat the file directly
+        with open(TEMP_FILE, "rb") as f:
+            pass  # just to trigger FileNotFoundError if missing
+
+        # If we got here, the file exists
+        state.gesture_mode = "review"
+        files = ["temp.jpg"]
+        return render_template("review.html", files=files)
+
+    except FileNotFoundError:
+        print("Capture failed: temp.jpg not found")
+        state.gesture_mode = "capture"
+        return redirect(url_for("index"))
+
+    finally:
+        print("Review route executed, gesture_mode:", state.gesture_mode)
 
 @bp.route("/keep", methods=["POST"])
-def keep_capture():
-    temp_path = os.path.join("static/gallery", "temp.jpg")
-    if os.path.exists(temp_path):
+def keep():
+    
+    if os.path.exists(TEMP_FILE):
         filename = f"capture_{int(time.time())}.jpg"
-        new_path = os.path.join("static/gallery", filename)
-        os.rename(temp_path, new_path)
+        new_path = os.path.join("static", filename)
+        os.rename(TEMP_FILE, new_path)
+
+        state.capture_in_progress = False  # reset capture state after keeping
+        state.gesture_mode = 'capture'  # reset to capture mode after keeping
         
         state.gallery.append(filename)
-        if len(state.gallery) > 50:
-            state.gallery.pop(0)
-        return jsonify({"message": "Capture kept", "file": filename})
-    return jsonify({"error": "No temp capture found"}), 404
+        enforce_gallery_limit()
+        return redirect(url_for("main.index"))
+    
+    else:
+        return jsonify({"error": "No temp capture found"}), 404
 
 @bp.route("/discard", methods=["POST"])
-def discard_capture():
-    temp_path = os.path.join("static/gallery", "temp.jpg")
-    if os.path.exists(temp_path):
-        os.remove(temp_path)
-        return jsonify({"message": "Capture discarded"})
-    return jsonify({"error": "No temp capture found"}), 404
+def discard():
+    
+    if os.path.exists(TEMP_FILE):
+        os.remove(TEMP_FILE)
+        print({"message": "Capture discarded"})
+        state.capture_in_progress = False  # reset capture state after discarding
+        state.gesture_mode = 'capture'  # reset to capture mode after discarding
+        return redirect(url_for("main.index"))
+    else:
+        return jsonify({"error": "No temp capture found"}), 404
 
 
 @bp.route("/video_feed")

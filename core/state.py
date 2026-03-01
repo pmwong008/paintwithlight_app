@@ -1,6 +1,7 @@
 # core/state.py
 import threading
 import time
+import os
 
 class State:
     """
@@ -17,6 +18,7 @@ class State:
         self.capture_requested = False
         self.capture_in_progress = False
         self.capture_done = False
+        self.ready_for_review = False
         self.gesture_mode = "idle"  # can be "idle", "capture_requested", "capturing", "cooldown"
         self.camera = None  # Placeholder for camera object
         # Cooldown tracking
@@ -39,13 +41,38 @@ class State:
             self.capture_in_progress = True
             self.capture_done = False
 
-    def finish_capture(self):
+    def finishing_capture(self, temp_path="static/temp.jpg"):
         with self._lock:
-            self.capture_in_progress = False
-            self.capture_done = True
-            self.capture_requested = False
-            # start cooldown (e.g. 5 seconds)
-            self._cooldown_until = time.time() + 5
+            try:
+                # Reset capture flags
+                self.capture_in_progress = True
+                self.capture_requested = False
+                # self.capture_done = True
+
+                # Switch to review mode if file exists
+                if os.path.exists(temp_path):
+                    self.gesture_mode = "review"
+                    print(f"Capture finished, file ready at {temp_path}")
+                else:
+                    # If no file, fall back to capture mode
+                    self.gesture_mode = "capture"
+                    self.capture_in_progress = False
+                    print("Capture finished but no file found")
+
+                # Start cooldown (e.g. 5 seconds)
+                self._cooldown_until = time.time() + 5
+
+            except Exception as e:
+                # Always reset to safe state on error
+                self.capture_in_progress = False
+                self.capture_requested = False
+                self.capture_done = False
+                self.gesture_mode = "capture"
+                print("Error finishing capture:", e)
+
+            finally:
+                print("finish_capture executed, gesture_mode:", self.gesture_mode)
+
 
     def cooldown_remaining(self) -> int:
         with self._lock:

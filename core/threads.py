@@ -1,13 +1,11 @@
 import threading
 import time
-from core.gestures_detector  import hands, pose # your real input module
+from core.gestures_detector  import hands, pose, HandLandmark, PoseLandmark
 from core.camera_frames import close_camera, capture_frame, stack_frames
 import cv2
 import mediapipe as mp
 from core.gallery import enforce_gallery_limit, discard_capture, keep_capture
 from core.state import state
-
-pose = mp.solutions.pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
 def frame_worker(stop_event):
     while not stop_event.is_set():
@@ -41,6 +39,7 @@ def gesture_loop():
                 state.capture_requested = True
                 trigger_capture()
                 print("trigger_capture called from gesture_loop")
+                
 
             elif state.gesture_mode == "review":
                 if gesture == "thumbs_up":
@@ -70,10 +69,10 @@ def check_for_gesture():
         return None
 
     success, frame = state.camera.read()
-    print("Camera read success:", success, "Frame type:", type(frame))
+    print("Camera read success in check_for_gesture:", success, "Frame type:", type(frame))
 
     if not success:
-        print("Camera read failed")
+        print("Camera read failed in check_for_gesture")
         return None
 
     # Convert to RGB for MediaPipe
@@ -85,9 +84,9 @@ def check_for_gesture():
 
     # --- Capture mode: both wrists above nose ---
     if state.gesture_mode == "capture" and pose_results.pose_landmarks:
-        nose = pose_results.pose_landmarks.landmark[mp.solutions.pose.PoseLandmark.NOSE]
-        left_wrist = pose_results.pose_landmarks.landmark[mp.solutions.pose.PoseLandmark.LEFT_WRIST]
-        right_wrist = pose_results.pose_landmarks.landmark[mp.solutions.pose.PoseLandmark.RIGHT_WRIST]
+        nose = pose_results.pose_landmarks.landmark[PoseLandmark.NOSE]
+        left_wrist = pose_results.pose_landmarks.landmark[PoseLandmark.LEFT_WRIST]
+        right_wrist = pose_results.pose_landmarks.landmark[PoseLandmark.RIGHT_WRIST]
         if left_wrist.y < nose.y and right_wrist.y < nose.y:
             return "wrist_above_nose"
         
@@ -95,8 +94,8 @@ def check_for_gesture():
     # --- Review mode: thumbs up/down ---
     if state.gesture_mode == "review" and hands_results.multi_hand_landmarks:
         for hand_landmarks in hands_results.multi_hand_landmarks:
-            thumb_tip = hand_landmarks.landmark[hands.HandLandmark.THUMB_TIP]
-            thumb_ip = hand_landmarks.landmark[hands.HandLandmark.THUMB_IP]
+            thumb_tip = hand_landmarks.landmark[HandLandmark.THUMB_TIP]
+            thumb_ip = hand_landmarks.landmark[HandLandmark.THUMB_IP]
 
             if thumb_tip.y < thumb_ip.y:  # thumb pointing up
                 return "thumbs_up"
@@ -120,18 +119,13 @@ def trigger_capture():
     """
     Helper to request a capture from gesture or route.
     """
-    if not state.capture_in_progress:
-        state.capture_requested = True
-        print("Capture requested via trigger_capture()")
-    else:
-        print("Capture already in progress, skipping.")
-
-
-
-
-
-
-
+    with state._lock:
+        if not state.capture_in_progress:
+            state.capture_requested = True
+            state.capture_in_progress = True
+            print("Capture requested via trigger_capture()")
+        else:
+            print("Capture already in progress, skipping.")
 
 
 '''
@@ -210,26 +204,27 @@ def gesture_loop():
 def controller_loop():
     while state.is_running():
         if state.capture_requested and not state.capture_in_progress:
-            state.capture_in_progress = True
-            print("Controller: capture started")
+            # state.capture_in_progress = True
+            print("Controller: capture in progress...")
+            success, frame = state.camera.read()
+            print("Controller: camera read success:", success, "Frame type:", type(frame))
+            if success and frame is not None:
+                try:
+                    # Capture multiple frames for stacking
+                    frames = [capture_frame() for _ in range(5)]
+                    stacked = stack_frames(frames)
 
-            try:
-                # Capture multiple frames for stacking
-                frames = [capture_frame() for _ in range(5)]
-                stacked = stack_frames(frames)
+                    # Save to temp.jpg
+                    cv2.imwrite("static/temp.jpg", cv2.cvtColor(stacked, cv2.COLOR_RGB2BGR))
+                    print("Controller: stacked image saved to static/temp.jpg")
+                    # state.finishing_capture()
+                    state.capture_done = True
+                    state.ready_for_review = True
+                    state.gesture_mode = "review"
+                    print("Controller: capture finished")
 
-                # Save to temp.jpg
-                cv2.imwrite("static/temp.jpg", cv2.cvtColor(stacked, cv2.COLOR_RGB2BGR))
-                print("Controller: stacked image saved to static/temp.jpg")
-                state.finish_capture()
-                state.capture_requested = False
-                print("Controller: capture finished")
-                state.capture_in_progress = False
-
-            except Exception as e:
-                print("Controller: error during capture", e)
-                state.capture_in_progress = False
-                state.capture_requested = False
+                except Exception as e:
+                    print("Controller: error during capture", e)
 
         time.sleep(0.1)
 
