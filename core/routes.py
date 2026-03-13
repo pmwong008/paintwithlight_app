@@ -6,14 +6,15 @@ import time
 import os
 from core.threads import trigger_capture, gesture_loop
 
-import cv2
+# import cv2
 from core.gallery import enforce_gallery_limit
+from core.state_flags import get_state_snapshot, gesture_active, controller_active, lock
 
 
 bp = Blueprint('main', __name__)
 
 TEMP_FILE = "static/temp.jpg"
-cv2 = None
+# cv2 = None
 
 @bp.route('/')
 def index():
@@ -82,27 +83,26 @@ def capture():
         "capture_in_progress": state.capture_in_progress
     })
 
+@bp.route("/reset_capture")
+def reset_capture():
+    global capture_state
+    with lock:
+        capture_state = "idle"
+    return {"message": "Capture state reset to idle"}
 
 
 @bp.route("/review")
 def review():
-    try:
-        # Try to open or stat the file directly
-        with open(TEMP_FILE, "rb") as f:
-            pass  # just to trigger FileNotFoundError if missing
+    return get_state_snapshot()
 
-        # If we got here, the file exists
-        state.gesture_mode = "review"
-        files = ["temp.jpg"]
-        return render_template("review.html", files=files)
-
-    except FileNotFoundError:
-        print("Capture failed: temp.jpg not found")
-        state.gesture_mode = "capture"
-        return redirect(url_for("index"))
-
-    finally:
-        print("Review route executed, gesture_mode:", state.gesture_mode)
+def get_state_snapshot():
+    with lock:
+        return {
+            "esposure": exposure,
+            "gesture_active": gesture_active,
+            "controller_active": controller_active
+            "capture_state": capture_state
+        }
 
 @bp.route("/keep", methods=["POST"])
 def keep():

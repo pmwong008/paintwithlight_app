@@ -55,6 +55,7 @@ const poller = setInterval(async () => {
   try {
     const response = await fetch("/status");
     const data = await response.json();
+    print("Fetched data from server:", data)
     errorCount = 0; // reset error count on success
     captureInProgress = data.capture_in_progress;
 

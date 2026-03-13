@@ -26,6 +26,7 @@ class State:
 
         # Optional scanner flag
         self.scanner_active = False
+        
 
     def set_exposure(self, value: float):
         with self._lock:
